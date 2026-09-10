@@ -16,25 +16,9 @@ const server = http.createServer(async (req, res) => {
       const channelsData = jsonRes;
       const playlistText = playlistRes;
 
-      // 2. Playlist ko lines mein tod kar, har ek channel ke pure block ko alag karo
-      const lines = playlistText.split(/\r?\n/);
-      let blocks = [];
-      let currentBlock = [];
-
-      for (let line of lines) {
-        if (line.startsWith('#EXTINF:')) {
-          if (currentBlock.length > 0) {
-            blocks.push(currentBlock.join('\n'));
-            currentBlock = [];
-          }
-        }
-        if (line.trim() !== '') {
-          currentBlock.push(line);
-        }
-      }
-      if (currentBlock.length > 0) {
-        blocks.push(currentBlock.join('\n'));
-      }
+      // 2. Playlist ko #EXTINF se blocks mein tod lo taaki har channel ka poora data sath rahe
+      const parts = playlistText.split('#EXTINF:');
+      let blocks = parts.slice(1).map(block => '#EXTINF:' + block);
 
       let finalLivePlaylist = "#EXTM3U\n";
 
@@ -57,20 +41,23 @@ const server = http.createServer(async (req, res) => {
           });
 
           if (matchedBlock) {
-            let modifiedBlock = matchedBlock;
+            let modifiedBlock = matchedBlock.trim();
 
             // Group-title change karo
             modifiedBlock = modifiedBlock.replace(/group-title="[^"]*"/, 'group-title="✨✦ʟɪᴠᴇ ᴇᴠᴇɴᴛꜱ✦✨"');
 
-            // Title ko JSON wale live match title se replace karo
-            const commaIndex = modifiedBlock.indexOf(',');
+            // Title ko JSON wale live match title se replace karo (pehli line ke comma ke baad)
+            const firstLineEnd = modifiedBlock.indexOf('\n');
+            const metaLine = firstLineEnd !== -1 ? modifiedBlock.substring(0, firstLineEnd) : modifiedBlock;
+            const commaIndex = metaLine.indexOf(',');
+            
             if (commaIndex !== -1) {
-              const metaPart = modifiedBlock.substring(0, commaIndex + 1);
-              modifiedBlock = metaPart + info.title;
+              const prefix = metaLine.substring(0, commaIndex + 1);
+              modifiedBlock = prefix + info.title + modifiedBlock.substring(metaLine.length);
             }
 
             // Poora block (license keys, cookies, URL ke sath) final list mein jodo
-            finalLivePlaylist += modifiedBlock + "\n";
+            finalLivePlaylist += modifiedBlock + "\n\n";
           }
         }
       }
