@@ -16,13 +16,29 @@ const server = http.createServer(async (req, res) => {
       const channelsData = jsonRes;
       const playlistText = playlistRes;
 
-      // 2. Playlist ko blocks mein tod lo
-      const rawEntries = playlistText.split('#EXTINF:');
-      let blocks = rawEntries.slice(1);
+      // 2. Playlist ko lines mein tod kar, har ek channel ke pure block ko alag karo
+      const lines = playlistText.split(/\r?\n/);
+      let blocks = [];
+      let currentBlock = [];
 
-      let finalLivePlaylist = "#EXTM3U\n"; // M3U file ka standard header
+      for (let line of lines) {
+        if (line.startsWith('#EXTINF:')) {
+          if (currentBlock.length > 0) {
+            blocks.push(currentBlock.join('\n'));
+            currentBlock = [];
+          }
+        }
+        if (line.trim() !== '') {
+          currentBlock.push(line);
+        }
+      }
+      if (currentBlock.length > 0) {
+        blocks.push(currentBlock.join('\n'));
+      }
 
-      // 3. Sirf live channels ke blocks ko dhundh kar add karo
+      let finalLivePlaylist = "#EXTM3U\n";
+
+      // 3. Sirf live channels ke blocks ko match karke add karo
       for (const [key, info] of Object.entries(channelsData)) {
         if (info.status === 'live' && info.title) {
           let matchedBlock = blocks.find(block => {
@@ -41,7 +57,7 @@ const server = http.createServer(async (req, res) => {
           });
 
           if (matchedBlock) {
-            let modifiedBlock = '#EXTINF:' + matchedBlock;
+            let modifiedBlock = matchedBlock;
 
             // Group-title change karo
             modifiedBlock = modifiedBlock.replace(/group-title="[^"]*"/, 'group-title="✨✦ʟɪᴠᴇ ᴇᴠᴇɴᴛꜱ✦✨"');
@@ -53,13 +69,13 @@ const server = http.createServer(async (req, res) => {
               modifiedBlock = metaPart + info.title;
             }
 
-            // Sirf live channel ka pura block list mein jodo
+            // Poora block (license keys, cookies, URL ke sath) final list mein jodo
             finalLivePlaylist += modifiedBlock + "\n";
           }
         }
       }
 
-      // 4. Sirf live channels ki nayi playlist return karo
+      // 4. Final valid M3U playlist return karo
       res.writeHead(200, { "Content-Type": "audio/x-mpegurl; charset=utf-8" });
       res.end(finalLivePlaylist);
 
