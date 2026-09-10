@@ -1,0 +1,12 @@
+{
+  "name": "m3u-live-filter",
+  "version": "1.0.0",
+  "description": "Live Star Sports M3U Filter",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
