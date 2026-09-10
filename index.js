@@ -44,7 +44,7 @@ const server = http.createServer(async (req, res) => {
             let modifiedBlock = '#EXTINF:' + matchedBlock;
 
             // Group-title change karo
-            modifiedBlock = modifiedBlock.replace(/group-title="[^"]*"/, 'group-title="✨✦ʟɪᴠᴇ ᴇᴠᴇɴⵜꜱ✦✨"');
+            modifiedBlock = modifiedBlock.replace(/group-title="[^"]*"/, 'group-title="✨✦ʟɪᴠᴇ ᴇᴠᴇɴᴛꜱ✦✨"');
 
             // Title ko JSON wale live match title se replace karo
             const commaIndex = modifiedBlock.indexOf(',');
