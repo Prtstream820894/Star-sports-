@@ -1,47 +1,80 @@
 const http = require('http');
 const PORT = process.env.PORT || 10000;
 
-const channelsMap = {
-  "Star Sports 1": "https://www.epgschedule.com/channel/star-sports-1/",
-  "Star Sports 1 Hindi": "https://www.epgschedule.com/channel/star-sports-1-hindi-hd/",
-  "Star Sports 2": "https://www.epgschedule.com/channel/star-sports-2-hd/",
-  "Star Sports 3": "https://www.epgschedule.com/channel/star-sports-3/",
-  "Star Sports Select 1": "https://www.epgschedule.com/channel/star-sports-select-1-hd/",
-  "Star Sports Select 2": "https://www.epgschedule.com/channel/star-sports-select-2-hd/",
-  "Star Sports Khel": "https://www.epgschedule.com/channel/star-sports-khel/"
-};
+const JSON_URL = "https://lingering-surf-17b2.prtstream.workers.dev/";
+const PLAYLIST_URL = "https://mainplaylist.poonamchouhan076.workers.dev/";
 
 const server = http.createServer(async (req, res) => {
   if (req.url === '/' || req.url === '/check') {
     try {
-      const channelEntries = Object.entries(channelsMap);
-      const fetchPromises = channelEntries.map(([_, url]) => 
-        fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } }).then(res => res.text())
-      );
+      // 1. Dono URLs se ek sath data fetch karo
+      const [jsonRes, playlistRes] = await Promise.all([
+        fetch(JSON_URL).then(r => r.json()),
+        fetch(PLAYLIST_URL).then(r => r.text())
+      ]);
 
-      const htmlContents = await Promise.all(fetchPromises);
-      let output = "";
+      const channelsData = jsonRes;
+      const playlistText = playlistRes;
 
-      for (let i = 0; i < channelEntries.length; i++) {
-        const channelName = channelEntries[i][0];
-        const html = htmlContents[i];
-        
-        // Simple logic to find the currently live program in the HTML
-        const liveEvent = extractLiveEvent(html);
+      // 2. Playlist ko entries/blocks mein tod lo (#EXTINF se shuru hone wale blocks)
+      const rawEntries = playlistText.split('#EXTINF:');
+      let header = rawEntries[0]; // Agar playlist ke shuru mein koi header ho
+      let blocks = rawEntries.slice(1);
 
-        if (liveEvent) {
-          output += `${channelName}: 🔴 LIVE - ${liveEvent}\n`;
-        } else {
-          output += `${channelName}: No live match right now\n`;
+      let updatedPlaylist = header;
+
+      // 3. Har ek live channel ko JSON ke hisab se process karo
+      for (const [key, info] of Object.entries(channelsData)) {
+        // Agar channel live hai tabhi aage badho
+        if (info.status === 'live' && info.title) {
+          // Channel key ke hisab se playlist mein matching dhundho
+          // Jaise 'star-sports-1-hd' ya 'star-sports-select-2-hd' ko playlist ke naam se match karna
+          let matchedBlock = blocks.find(block => {
+            const lowerBlock = block.toLowerCase();
+            const searchKey = info.channel_name.toLowerCase();
+            
+            // "Digital" ya exact match check karne ke liye logic
+            if (searchKey.includes("star sports 1 hd") && lowerBlock.includes("star sports 1 digital")) return true;
+            if (searchKey.includes("star sports 1 hindi hd") && lowerBlock.includes("star sports 1 hindi digital")) return true;
+            if (searchKey.includes("star sports 2 hd") && lowerBlock.includes("star sports 2 digital")) return true;
+            if (searchKey.includes("star sports 2 hindi hd") && lowerBlock.includes("star sports hindi 2 hd digital")) return true;
+            if (searchKey.includes("star sports 3") && (lowerBlock.includes("star sports 3 [ digital ]") || lowerBlock.includes("star sports 3"))) return true;
+            if (searchKey.includes("select 1") && lowerBlock.includes("star sports select 1 digital")) return true;
+            if (searchKey.includes("select 2") && lowerBlock.includes("star sports select 2 digital")) return true;
+            
+            // General fallback match
+            return lowerBlock.includes(searchKey.replace("hd", "").trim());
+          });
+
+          if (matchedBlock) {
+            // Pura block mil gaya, ab isme group-title aur display title ko replace karna hai
+            let modifiedBlock = '#EXTINF:' + matchedBlock;
+
+            // Group-title ko change karke ✨✦ʟɪᴠᴇ ᴇᴠᴇɴⵜꜱ✦✨ kar do
+            modifiedBlock = modifiedBlock.replace(/group-title="[^"]*"/, 'group-title="✨✦ʟɪᴠᴇ ᴇᴠᴇɴᴛꜱ✦✨"');
+
+            // Purane channel name ko JSON wale naye title se replace karo (comma ke baad wala part title hota hai)
+            // Jaise: #EXTINF:-1 group-title="...",Old Title -> #EXTINF:-1 group-title="...",New Title from JSON
+            const commaIndex = modifiedBlock.indexOf(',');
+            if (commaIndex !== -1) {
+              const metaPart = modifiedBlock.substring(0, commaIndex + 1);
+              modifiedBlock = metaPart + info.title;
+            }
+
+            // Updated playlist mein pura block (license keys, cookies, URL sabhi ke sath) jod do
+            updatedPlaylist += modifiedBlock + "\n";
+          }
         }
+        // Agar status "offline" hai, toh code usko loop mein skip kar dega, isliye woh playlist mein nahi aayega (Remove ho jayega).
       }
 
-      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end(output);
+      // 4. Final updated M3U playlist return karo
+      res.writeHead(200, { "Content-Type": "audio/x-mpegurl; charset=utf-8" });
+      res.end(updatedPlaylist);
 
     } catch (err) {
       res.writeHead(500, { "Content-Type": "text/plain" });
-      res.end("Error checking schedules: " + err.message);
+      res.end("Error generating playlist: " + err.message);
     }
   } else {
     res.writeHead(404, { "Content-Type": "text/plain" });
@@ -49,20 +82,6 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-function extractLiveEvent(html) {
-  // Yeh basic search hai live matches ke liye
-  const lowerHtml = html.toLowerCase();
-  
-  // Is logic ko apni website ke specific HTML tags ke hisab se tweak karna pad sakta hai
-  if (lowerHtml.includes("live") || lowerHtml.includes("t20") || lowerHtml.includes("odi") || lowerHtml.includes("ipl")) {
-    if (lowerHtml.includes("highlights") || lowerHtml.includes("replay")) {
-      return null;
-    }
-    return "Ongoing Live Match/Event"; 
-  }
-  return null;
-}
-
 server.listen(PORT, () => {
-  console.log(`Render server is running on port ${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });
