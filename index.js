@@ -31,7 +31,7 @@ const server = http.createServer(async (req, res) => {
             
             if (searchKey.includes("star sports 1 hd") && lowerBlock.includes("star sports 1 digital")) return true;
             if (searchKey.includes("star sports 1 hindi hd") && lowerBlock.includes("star sports 1 hindi digital")) return true;
-            if (searchKey.includes("star sports 2 hd") && lowerBlock.includes("star sports 2 HD")) return true;
+            if (searchKey.includes("star sports 2 hd") && lowerBlock.includes("star sports 2")) return true;
             if (searchKey.includes("star sports 2 hindi hd") && lowerBlock.includes("star sports hindi 2 hd digital")) return true;
             if (searchKey.includes("star sports 3") && (lowerBlock.includes("star sports 3 [ digital ]") || lowerBlock.includes("star sports 3"))) return true;
             if (searchKey.includes("select 1") && lowerBlock.includes("star sports select 1 digital")) return true;
